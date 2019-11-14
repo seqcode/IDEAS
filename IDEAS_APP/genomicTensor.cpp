@@ -157,10 +157,12 @@ void genomicTensor::run(char const *finput, char const *fbed, char const *fcov, 
 	}
 
 /////////////////
+	//tpara.probAlpha = mydata.totalN/mydata.ploidity;//0.1;//min(1., max(1e-1, 10./ (double)mydata.totalN));
 	tpara.probAlpha = tpara.trueindN;
 	tpara.probAlpha = max(1., tpara.probAlpha / 5.);
 	if(AA > 0) tpara.probAlpha = AA;//tpara.probAlpha * AA; //changed 02/07/2015
 
+//	tpara.A = tpara.probAlpha; //added on Jul 11th
 
 	if(parafile != NULL)
 	{	FILE *ff = fopen(parafile, "r");
@@ -275,6 +277,51 @@ void genomicTensor::run(char const *finput, char const *fbed, char const *fcov, 
 
 	tmpSpace = tmpSpace2 = NULL;//new double[100 * mydata.L * maxG];
 	mylik.updateLambda(tpara.priorW, true, false);
+//printf("<%f %f %f | %f,%f,%f>\n", mylik.gaussprior[0], mylik.gaussprior[mylik.gausssz], mylik.gaussprior[mylik.gausssz*2],mylik.gaussprior0[0], mylik.gaussprior0[mylik.gausssz], mylik.gaussprior0[mylik.gausssz*2]);fflush(stdout);
+/*
+for(i=0;i<mylik.clustersz;i++)
+{	for(j=0;j<mylik.maxymsz+1;j++) printf("%f,",mylik.gaussprior[i*mylik.gausssz+j]);
+	printf("\n");
+}
+for(i = 0; i < mydata.totalN; i++)
+{	float *dpy = dataYP[i];
+	double tlp[mylik.clustersz];
+	for(j = 0; j < mydata.L; j++, dpy += ymsz[i])
+	{	mylik.computeLP(dpy, NULL, i, tpara.priorW, tlp);
+		int k, l = 0;
+		for(k = 1; k < mylik.clustersz; k++)
+			if(tlp[l] < tlp[k]) l = k;
+		mydata.data[i * mydata.L + j] = l;
+if(i == 0 && j < 10) 
+{	for(k=0;k<mylik.clustersz; k++) printf("%f ", tlp[k]);
+	printf("\n");
+}
+	}
+}
+for(i=0;i<mylik.clustersz;i++)
+{	for(j=0;j<mylik.maxymsz+1;j++) printf("%f,",mylik.gaussprior[i*mylik.gausssz+j]);
+	printf("\n");
+}
+FILE *fff = fopen("tmp.txt","w");
+for(i = 0; i < mydata.L; i++)
+{	for(j = 0; j < mydata.totalN; j++)
+	{	fprintf(fff, "%d ", (int)mydata.data[j * mydata.L + i]);
+		mydata.data[j*mydata.L+i]=-1;
+	}
+	fprintf(fff, "\n");
+}
+fclose(fff);
+exit(0);
+*/
+	inferStructure(mydata, tpara, foutput, sqc, myinit);
+	if(tmpSpace != NULL) delete tmpSpace;
+	if(tmpSpace2 != NULL) delete tmpSpace2;
+	
+	//outputResult(foutput);
+//printf("updatePara=%f, updateBase=%f\n", (double)timeA/1000000., (double)timeB/1000000.);fflush(stdout);
+//printf("baseForward=%f, baseBackward=%f\n", (double)Time1/1000000., (double)Time2/1000000.);fflush(stdout);
+
+//printf("Time3=%f\n", (double)Time3/1e6);fflush(stdout);
 	
 	if(mydata.data != NULL) delete mydata.data;
 	if(mydata.indIndex != NULL) delete mydata.indIndex;
@@ -664,7 +711,14 @@ double genomicTensor::_imputeOne(int id, vector<int> const &breaks, int bst, int
 	int ided = mydata.indIndex[id+1], idst = mydata.indIndex[id];
 
 	double prop[asz + 1];
+//	if(tmpM == NULL || gID > 50)
 		_getProp(tpara, id, bst, (*pp), asz, ipm, nhp, basePop + bst, prop);
+//	else	_getProp(tpara, id, bst, -1, asz, ipm, nhp, basePop + bst, prop);
+/*if(hpass)//encourage smoothness of state assignments across genome 
+{	if(bst > 0) prop[(int)(*(dp-1))]+=tpara.probAlpha;
+	if(bed < mydata.L) prop[(int)(*(dp+1))]+=tpara.probAlpha;
+}*/
+	////////////////////////////
 	
 	double a = tpara.priorW;
 	double RT = 0;
@@ -829,6 +883,12 @@ lapsep *= tpara.indWeight[i];
 				else
 				{	k = _sample(ttpointer, mylik.clustersz, tpara.maximum & 1);
 					tk = o;
+/*if(gID > 50 && k==3)
+{	for(int ii = 0; ii < mylik.clustersz; ii++) printf("%d:%f(%f) ", ii, ttpointer[ii], ttpointer[ii+mylik.clustersz]);
+	printf(" | l=0, %d\n", j);fflush(stdout);
+for(int ii = 0; ii < mydata.totalN; ii++) printf("%d;",(int)mydata.data[ii*mydata.L+j]);printf(" posSZ=%d,%d\n", posSZ, (int)basePop[j]);
+exit(0);
+}*/
 				}
 				ln += (int)(o != tk);
 				*dp = (float)tk;
